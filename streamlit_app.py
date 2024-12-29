@@ -9,6 +9,11 @@ from tensorflow.keras.models import load_model
 import tempfile
 import os
 from custom_metric import custom_accuracy, custom_hamming_loss, custom_exact_match_ratio
+import random
+from skimage.feature import hog
+import joblib
+from scipy.sparse import issparse
+from visualizeFunc import predict_image
 
 # Custom metrics
 custom_objects = {
@@ -103,56 +108,11 @@ elif sample_img is not None:
 if source_img:
     container_col2.image(source_img, caption='Input', use_container_width=True)
 
-def predict_image(image, model, threshold=0.5):
-    """Predict labels and probabilities for the given image."""
-    processed_img = process_image(image)
-    print("Processed Image Min/Max:", processed_img.min(), processed_img.max())
-    print("Processed Image Shape:", processed_img.shape)
-    
-    # Get raw predictions
-    predictions = model.predict(processed_img, verbose=1)[0]
-    print("Raw predictions shape:", predictions.shape)
-    print("Raw predictions dtype:", predictions.dtype)
-    
-    # Convert to float if necessary
-    if predictions.dtype != np.float32:
-        predictions = predictions.astype(np.float32)
-    
-    # If predictions are binary (0 or 1), get the raw logits
-    if np.array_equal(predictions, predictions.astype(bool)):
-        # Try to get raw predictions before activation
-        predictions = model(processed_img, training=False)[0]
-    
-    # Apply sigmoid if needed
-    if np.any(predictions > 1) or np.any(predictions < 0):
-        predictions = tf.sigmoid(predictions).numpy()
-    
-    print("Final predictions:", predictions)
-    predicted_labels = [(LABELS[idx], float(prob)) 
-                       for idx, prob in enumerate(predictions) 
-                       if prob > threshold]
-    print("Labels above threshold:", predicted_labels)
-    return predicted_labels
-
-def process_image(image):
-    if isinstance(image, str):
-        img_array = cv2.imread(image, cv2.IMREAD_COLOR)
-    else:
-        img_array = np.array(image)
-        img_array = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
-    
-    # Ensure consistent dtype and normalization
-    img_array = img_array.astype(np.float32)
-    img_resized = cv2.resize(img_array, (224, 224))
-    img_normalized = img_resized / 255.0
-    img_expanded = np.expand_dims(img_normalized, axis=0)
-    return img_expanded
-
 # Load models
 @st.cache_resource(hash_funcs={tf.keras.models.Model: id})
 def load_models():
     cnn_model = load_model('./Model/cnn/cnn.h5', custom_objects=custom_objects)
-        # Load EfficientNet model with proper configuration
+    # Load EfficientNet model with proper configuration
     efficient_model = tf.keras.models.load_model('./Model/efficient/b0.h5')
     # Set to inference mode
     efficient_model.trainable = False
@@ -165,14 +125,83 @@ def load_models():
         optimizer='adam',
         loss='binary_crossentropy',
         metrics=[custom_accuracy, custom_hamming_loss, custom_exact_match_ratio]
-    )
-    dummy_input = np.zeros((1, 224, 224, 3))
-    print("Dummy prediction:", efficient_model.predict(dummy_input))    
+    ) 
     yolo_model = YOLO('./Model/yolo/weight/best.pt')
-    return cnn_model, efficient_model, yolo_model
+    best_ml = joblib.load('./Model/ml/model__64__hog__17.joblib')
+    return cnn_model, efficient_model, yolo_model, best_ml
+
+def preprocess_image(image, target_size=(224, 224)):
+    # Match exactly your notebook preprocessing
+    if isinstance(image, Image.Image):
+        # Convert PIL Image to cv2 format
+        image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+    
+    img_resized = cv2.resize(image, target_size)
+    img_array = img_resized / 255.0
+    img_array = np.expand_dims(img_array, axis=0)
+    return img_array
+
+print("-----------------")
+
+def preprocess_image_and_feature_extraction_ml(image):
+    RESIZE = (64, 64)
+    FEATURE = 'hog'
+    image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
+    image = cv2.resize(image, RESIZE)
+    features = None
+    if FEATURE == 'hog':
+        features, _ = hog(
+            image,
+            orientations=9,
+            pixels_per_cell=(8, 8),
+            cells_per_block=(2, 2),
+            block_norm="L2-Hys",
+            visualize=True,
+        )
+    
+    return features
+    
+
+def get_predictions(model, image, threshold=0.5):
+    predictions = model.predict(image)[0]  # Get first element like in notebook
+    # Use the same logic as your notebook
+    predicted_labels = []
+    for idx, prob in enumerate(predictions):
+        if prob > threshold:  # Use same threshold comparison
+            predicted_labels.append((LABELS[idx], float(prob)))
+    
+    # Add debug prints
+    print("Raw predictions:", predictions)
+    print("Thresholded indices:", [i for i, prob in enumerate(predictions) if prob > threshold])
+    return predicted_labels
+
+
+def get_predictions_ml(model, features, threshold=0.5):
+    probas = convert_to_dense(model.predict_proba([features]))[0]
+    prediction = convert_to_dense(model.predict([features]))[0]
+    # print("Raw predictions:", probas)
+    # print("🚀 ~ prediction:", prediction)
+    predicted_labels = []
+    for idx, proba in enumerate(probas):
+        if proba >= threshold:
+            predicted_labels.append((LABELS[idx], proba))
+    # print("Thresholded indices:", [i for i, prob in enumerate(probas) if proba >= threshold])
+    return predicted_labels
+
+
+def convert_to_dense(probabilities):
+    if issparse(probabilities):
+        dense_matrix = probabilities.toarray()
+    elif isinstance(probabilities, np.ndarray):
+        dense_matrix = probabilities
+    else:
+        raise ValueError("Input must be a scipy.sparse matrix or numpy.ndarray.")
+
+    return dense_matrix
+
 
 try:
-    cnn_model, efficient_model, yolo_model = load_models()
+    cnn_model, efficient_model, yolo_model, ml_model = load_models()
 except Exception as e:
     st.error("Unable to load models. Check the specified paths.")
     st.error(e)
@@ -181,14 +210,31 @@ except Exception as e:
 if st.sidebar.button('Detect Objects') and source_img is not None:
     try:
         with col3:
+            # ML Model
+            st.subheader('ML-KMM Model Predictions')
+            processed_img_ml = preprocess_image_and_feature_extraction_ml(source_img)
+            with st.container(border=True):
+                ml_predictions = get_predictions_ml(ml_model, processed_img_ml, st.session_state.confidence)
+                print("ML-KNN", ml_predictions)
+                if len(ml_predictions) > 0:
+                    for label, prob in ml_predictions:
+                        st.write(f"{label}")
+                else:
+                    st.write("No labels detected with confidence above threshold")
+
             # CNN Model
             st.subheader('CNN Model Predictions')
-            cnn_predictions = predict_image(source_img, cnn_model, st.session_state.confidence)
-            if cnn_predictions:
-                for label, prob in cnn_predictions:
-                    st.write(f"{label}: {prob:.2f}")
-            else:
-                st.write("No labels detected with confidence above threshold")
+            with st.container(border=True):
+                cnn_predictions = get_predictions(cnn_model, processed_img, st.session_state.confidence)
+                print("CNN", cnn_predictions)
+                if cnn_predictions:
+                    if len(cnn_predictions) > 1:
+                        cnn_predictions = cnn_predictions[:-1]
+
+                    for label, prob in cnn_predictions:
+                        st.write(f"{label}")
+                else:
+                    st.write("No labels detected with confidence above threshold")
 
             # EfficientNet Model
             st.subheader('EfficientNet Predictions')

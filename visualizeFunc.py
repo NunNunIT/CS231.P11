@@ -19,15 +19,6 @@ LABELS = [
     "bag, wallet"
 ]
 
-# Load lại mô hình
-loaded_model = tf.keras.models.load_model('./Model/efficient/b0.h5')
-
-# Đảm bảo inference
-loaded_model.trainable = False
-for layer in loaded_model.layers:
-    if isinstance(layer, tf.keras.layers.BatchNormalization):
-        layer.trainable = False
-
 def process_image(image):
     if isinstance(image, str):  # Đường dẫn ảnh
         img_array = cv2.imread(image, cv2.IMREAD_COLOR)
@@ -50,7 +41,3 @@ def predict_image(image, model, threshold=0.5):
     predicted_labels = [(LABELS[idx], float(prob)) for idx, prob in enumerate(predictions) if prob > threshold]
     print("Labels above threshold:", predicted_labels)
     return predicted_labels
-
-# Example usage:
-result = predict_image("./sample_images/test.jpg", loaded_model)
-print(result)
