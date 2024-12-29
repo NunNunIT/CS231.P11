@@ -1,3 +1,4 @@
 /Model/*
 /venv/*
 *.pyc
+Notebook/*

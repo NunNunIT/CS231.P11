@@ -2,35 +2,27 @@ import streamlit as st
 from streamlit_image_select import image_select
 from PIL import Image
 from ultralytics import YOLO
-import torch
 import numpy as np
-from tensorflow.keras.models import load_model
-from tensorflow.keras.preprocessing.image import img_to_array
 import cv2
 import tensorflow as tf
 from tensorflow.keras.models import load_model
+import tempfile
+import os
 from custom_metric import custom_accuracy, custom_hamming_loss, custom_exact_match_ratio
 import random
 import joblib
 from ml import *
+from scipy.sparse import issparse
+from visualizeFunc import predict_image
 
+# Custom metrics
 custom_objects = {
     'custom_accuracy': custom_accuracy,
     'custom_hamming_loss': custom_hamming_loss,
     'custom_exact_match_ratio': custom_exact_match_ratio
 }
 
-# set session state variables for persistence
-if 'uploaded_img' not in st.session_state:
-    st.session_state.uploaded_img = None
-
-if 'confidence' not in st.session_state:
-    st.session_state.confidence = 60 / 100
-
-if 'iou_thresh' not in st.session_state:
-    st.session_state.iou_thresh = 20 / 100
-
-# Định nghĩa các lớp nhãn cho mô hình đa nhãn
+# Labels
 LABELS = [
     "shirt, blouse",
     "top, t-shirt, sweatshirt",
@@ -42,7 +34,7 @@ LABELS = [
     "bag, wallet"
 ]
 
-# page layout
+# Streamlit setup
 st.set_page_config(
     page_title='Fashion Object Detection',
     page_icon='👜',
@@ -50,7 +42,15 @@ st.set_page_config(
     initial_sidebar_state='auto',
 )
 
-# sidebar content
+# Session state variables
+if 'uploaded_img' not in st.session_state:
+    st.session_state.uploaded_img = None
+if 'confidence' not in st.session_state:
+    st.session_state.confidence = 0.6
+if 'iou_thresh' not in st.session_state:
+    st.session_state.iou_thresh = 0.2
+
+# Sidebar
 with st.sidebar:
     @st.cache_data
     def load_image(image_file):
@@ -59,26 +59,26 @@ with st.sidebar:
         return image
 
     st.header('Image Selection')
-
     with st.form('file-upload-form', clear_on_submit=True):
-        st.session_state.uploaded_img = st.file_uploader('Upload an image...', type='jpg', key=1)
+        st.session_state.uploaded_img = st.file_uploader('Upload an image...', type=['jpg', 'jpeg', 'png'])
         submitted = st.form_submit_button('Submit/Clear Upload')
 
-    if type(st.session_state.uploaded_img) is st.runtime.uploaded_file_manager.UploadedFile:
+    if isinstance(st.session_state.uploaded_img, st.runtime.uploaded_file_manager.UploadedFile):
         st.session_state.uploaded_img = load_image(st.session_state.uploaded_img)
 
-    st.session_state.confidence = float(st.slider(
-        'Select Model Confidence', 0, 100, 60)) / 100
+    st.session_state.confidence = st.slider(
+        'Select Model Confidence', 0, 100, 60) / 100
+    st.session_state.iou_thresh = st.slider(
+        'Select IOU Threshold', 0, 100, 20) / 100
 
-    st.session_state.iou_thresh = float(st.slider(
-        'Select IOU Threshold', 0, 100, 20)) / 100
-
+# Main layout
 st.title('Fashion Object Detection')
-st.caption('Select a sample fashion photo, or upload your own! - Recommended :blue[600 Height x 400 Width].')
-st.caption('Afterwards, click the :blue[Detect Objects] button to see the results.')
+st.caption('Select a sample fashion photo, or upload your own!')
+st.caption('Click the :blue[Detect Objects] button to see the results.')
 
 col1, col2, col3 = st.columns([0.25, 0.25, 0.5], gap='medium')
 
+# Sample image selection
 with col1:
     sample_img = image_select(
         label='Select a sample fashion photo',
@@ -94,27 +94,38 @@ with col1:
         use_container_width=False
     )
 
+# Image display container
 with col2:
-    with st.container(border=True):
-        container_col2 = st.empty()
+    container_col2 = st.empty()
 
 source_img = None
 if st.session_state.uploaded_img is not None:
-    source_img = st.session_state.uploaded_img.copy()
+    source_img = st.session_state.uploaded_img
     st.session_state.uploaded_img = None
 elif sample_img is not None:
     source_img = Image.open(sample_img)
-    sample_img = None
 
-container_col2.image(source_img,
-                    caption='Input',
-                    use_container_width=True
-                    )
+if source_img:
+    container_col2.image(source_img, caption='Input', use_container_width=True)
 
-@st.cache_resource
+# Load models
+@st.cache_resource(hash_funcs={tf.keras.models.Model: id})
 def load_models():
-    cnn_model = load_model('./Model/cnn/cnn_best.h5')
-    efficient_model = load_model('./Model/cnn/cnn_best.h5')
+    cnn_model = load_model('./Model/cnn/cnn.h5', custom_objects=custom_objects)
+    # Load EfficientNet model with proper configuration
+    efficient_model = tf.keras.models.load_model('./Model/efficient/b0.h5')
+    # Set to inference mode
+    efficient_model.trainable = False
+    for layer in efficient_model.layers:
+        if isinstance(layer, tf.keras.layers.BatchNormalization):
+            layer.trainable = False
+            
+    # Compile the model to ensure proper setup
+    efficient_model.compile(
+        optimizer='adam',
+        loss='binary_crossentropy',
+        metrics=[custom_accuracy, custom_hamming_loss, custom_exact_match_ratio]
+    ) 
     yolo_model = YOLO('./Model/yolo/weight/best.pt')
     best_ml = joblib.load('./Model/ml/model__64__hog__17.joblib')
     return cnn_model, efficient_model, yolo_model, best_ml
@@ -151,13 +162,9 @@ except Exception as e:
     st.error("Unable to load models. Check the specified paths.")
     st.error(e)
 
-try:
-    if st.sidebar.button('Detect Objects'):
-        st.session_state.uploaded_img = None
-
-        # Tiền xử lý ảnh một lần cho cả hai mô hình
-        processed_img = preprocess_image(source_img)
-
+# Object detection
+if st.sidebar.button('Detect Objects') and source_img is not None:
+    try:
         with col3:
             # ML Model
             st.subheader('ML-KMM Model Predictions')
@@ -187,34 +194,40 @@ try:
 
             # EfficientNet Model
             st.subheader('EfficientNet Predictions')
-            with st.container(border=True):
-                # Lấy danh sách nhãn từ hàm get_predictions
-                efficient_predictions = get_predictions(efficient_model, processed_img, st.session_state.confidence)
-                print("eff", efficient_predictions)
-
-                if efficient_predictions:
-                    random.shuffle(efficient_predictions)  
-                    for label, prob in efficient_predictions:
-                        st.write(f"{label}")
-                else:
-                    st.write("No labels detected with confidence above threshold")
+            efficient_predictions = predict_image(source_img, efficient_model, st.session_state.confidence)
+            print("EFF", efficient_predictions)
+            if efficient_predictions:
+                for label, prob in efficient_predictions:
+                    st.write(f"{label}: {prob:.2f}")
+            else:
+                st.write("No labels detected with confidence above threshold")
 
             # YOLO Model
             st.subheader('YOLO Detection')
-            with st.container(border=True):
-                yolo_results = yolo_model.predict(source_img,
-                                                save=False,
-                                                imgsz=(608, 416),
-                                                conf=st.session_state.confidence,
-                                                iou=st.session_state.iou_thresh
-                                                )
-                for r in yolo_results:
-                    im_array = r.plot()
-                    yolo_result = Image.fromarray(im_array[..., ::-1])
-                st.image(yolo_result, caption='YOLO Result', use_container_width=True)
+            # Create temporary file for YOLO processing if needed
+            with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_file:
+                img_path = tmp_file.name
+                source_img.save(img_path)
+                
+            yolo_results = yolo_model.predict(
+                img_path,
+                save=False,
+                imgsz=(608, 416),
+                conf=st.session_state.confidence,
+                iou=st.session_state.iou_thresh
+            )
+            
+            for r in yolo_results:
+                im_array = r.plot()
+                yolo_result = Image.fromarray(im_array[..., ::-1])
+            st.image(yolo_result, caption='YOLO Result', use_container_width=True)
+            
+            # Clean up temporary file
+            os.unlink(img_path)
 
-        source_img = None
-
-except Exception as e:
-    st.error('Error encountered during model inference.')
-    st.error(e)
+    except Exception as e:
+        st.error('Error encountered during model inference.')
+        st.error(e)
+else:
+    if st.sidebar.button('Detect Objects'):
+        st.error('Please select or upload an image first.')
