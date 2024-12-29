@@ -9,10 +9,12 @@ from tensorflow.keras.models import load_model
 import tempfile
 import os
 from custom_metric import custom_accuracy, custom_hamming_loss, custom_exact_match_ratio
+import random
+import joblib
 import joblib
 from skimage.feature import hog
 from scipy.sparse import issparse
-from visualizeFunc import predict_image
+from visualizeFunc import predict_image, predict_image_from_ml
 
 # Custom metrics
 custom_objects = {
@@ -151,6 +153,8 @@ def preprocess_image(image, target_size=(224, 224)):
     img_array = img_resized / 255.0
     img_array = np.expand_dims(img_array, axis=0)
     return img_array
+    
+
 
 def get_predictions(model, image, threshold=0.5):
     predictions = model.predict(image)[0]
