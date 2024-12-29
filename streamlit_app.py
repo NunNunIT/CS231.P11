@@ -11,6 +11,9 @@ import tensorflow as tf
 from tensorflow.keras.models import load_model
 from custom_metric import custom_accuracy, custom_hamming_loss, custom_exact_match_ratio
 import random
+from skimage.feature import hog
+import joblib
+from scipy.sparse import issparse
 
 custom_objects = {
     'custom_accuracy': custom_accuracy,
@@ -114,7 +117,8 @@ def load_models():
     cnn_model = load_model('./Model/cnn/cnn_best.h5')
     efficient_model = load_model('./Model/cnn/cnn_best.h5')
     yolo_model = YOLO('./Model/yolo/weight/best.pt')
-    return cnn_model, efficient_model, yolo_model
+    best_ml = joblib.load('./Model/ml/model__64__hog__17.joblib')
+    return cnn_model, efficient_model, yolo_model, best_ml
 
 def preprocess_image(image, target_size=(224, 224)):
     # Match exactly your notebook preprocessing
@@ -126,6 +130,27 @@ def preprocess_image(image, target_size=(224, 224)):
     img_array = img_resized / 255.0
     img_array = np.expand_dims(img_array, axis=0)
     return img_array
+
+print("-----------------")
+
+def preprocess_image_and_feature_extraction_ml(image):
+    RESIZE = (64, 64)
+    FEATURE = 'hog'
+    image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
+    image = cv2.resize(image, RESIZE)
+    features = None
+    if FEATURE == 'hog':
+        features, _ = hog(
+            image,
+            orientations=9,
+            pixels_per_cell=(8, 8),
+            cells_per_block=(2, 2),
+            block_norm="L2-Hys",
+            visualize=True,
+        )
+    
+    return features
+    
 
 def get_predictions(model, image, threshold=0.5):
     predictions = model.predict(image)[0]  # Get first element like in notebook
@@ -140,8 +165,33 @@ def get_predictions(model, image, threshold=0.5):
     print("Thresholded indices:", [i for i, prob in enumerate(predictions) if prob > threshold])
     return predicted_labels
 
+
+def get_predictions_ml(model, features, threshold=0.5):
+    probas = convert_to_dense(model.predict_proba([features]))[0]
+    prediction = convert_to_dense(model.predict([features]))[0]
+    # print("Raw predictions:", probas)
+    # print("🚀 ~ prediction:", prediction)
+    predicted_labels = []
+    for idx, proba in enumerate(probas):
+        if proba >= threshold:
+            predicted_labels.append((LABELS[idx], proba))
+    # print("Thresholded indices:", [i for i, prob in enumerate(probas) if proba >= threshold])
+    return predicted_labels
+
+
+def convert_to_dense(probabilities):
+    if issparse(probabilities):
+        dense_matrix = probabilities.toarray()
+    elif isinstance(probabilities, np.ndarray):
+        dense_matrix = probabilities
+    else:
+        raise ValueError("Input must be a scipy.sparse matrix or numpy.ndarray.")
+
+    return dense_matrix
+
+
 try:
-    cnn_model, efficient_model, yolo_model = load_models()
+    cnn_model, efficient_model, yolo_model, ml_model = load_models()
 except Exception as e:
     st.error("Unable to load models. Check the specified paths.")
     st.error(e)
@@ -154,6 +204,18 @@ try:
         processed_img = preprocess_image(source_img)
 
         with col3:
+            # ML Model
+            st.subheader('ML-KMM Model Predictions')
+            processed_img_ml = preprocess_image_and_feature_extraction_ml(source_img)
+            with st.container(border=True):
+                ml_predictions = get_predictions_ml(ml_model, processed_img_ml, st.session_state.confidence)
+                print("ML-KNN", ml_predictions)
+                if len(ml_predictions) > 0:
+                    for label, prob in ml_predictions:
+                        st.write(f"{label}")
+                else:
+                    st.write("No labels detected with confidence above threshold")
+
             # CNN Model
             st.subheader('CNN Model Predictions')
             with st.container(border=True):
