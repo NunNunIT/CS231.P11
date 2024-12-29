@@ -144,24 +144,6 @@ def load_models():
 
     return loaded_models, errors
 
-def preprocess_image(image, target_size=(224, 224)):
-    if isinstance(image, Image.Image):
-        image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-    img_resized = cv2.resize(image, target_size)
-    img_array = img_resized / 255.0
-    img_array = np.expand_dims(img_array, axis=0)
-    return img_array
-    
-
-
-def get_predictions(model, image, threshold=0.5):
-    predictions = model.predict(image)[0]
-    predicted_labels = []
-    for idx, prob in enumerate(predictions):
-        if prob > threshold:
-            predicted_labels.append((LABELS[idx], float(prob)))
-    return predicted_labels
-
 models, load_errors = load_models()
 
 if load_errors:
@@ -174,12 +156,12 @@ if st.sidebar.button('Detect Objects') and source_img is not None:
         if 'cnn_model' in models:
             try:
                 st.subheader('CNN Model Predictions')
-                processed_img = preprocess_image(source_img)
-                cnn_predictions = get_predictions(models['cnn_model'], processed_img, st.session_state.confidence)
+                cnn_predictions = predict_image(source_img, models['cnn_model'], st.session_state.confidence)
                 if cnn_predictions:
                     with st.container(border=True):
                         for label, prob in cnn_predictions:
-                            st.markdown(f"<p style='font-size:20px;'>{label}: {prob:.2f}</p>", unsafe_allow_html=True)
+                            # st.write(f"{label}: {prob}")
+                            st.markdown(f"<p style='font-size:20px;'>{label}: {prob}</p>", unsafe_allow_html=True)
                 else:
                     st.write("No labels detected with confidence above threshold")
             except Exception as e:
@@ -192,7 +174,8 @@ if st.sidebar.button('Detect Objects') and source_img is not None:
                 if efficient_predictions:
                     with st.container(border=True):
                         for label, prob in efficient_predictions:
-                            st.markdown(f"<p style='font-size:20px;'>{label}: {prob:.2f}</p>", unsafe_allow_html=True)
+                            # st.write(f"{label}: {prob}")
+                            st.markdown(f"<p style='font-size:20px;'>{label}: {prob}</p>", unsafe_allow_html=True)
                 else:
                     st.write("No labels detected with confidence above threshold")
             except Exception as e:
