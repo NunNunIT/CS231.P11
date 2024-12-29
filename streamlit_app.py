@@ -9,8 +9,6 @@ from tensorflow.keras.models import load_model
 import tempfile
 import os
 from custom_metric import custom_accuracy, custom_hamming_loss, custom_exact_match_ratio
-import random
-import joblib
 import joblib
 from skimage.feature import hog
 from scipy.sparse import issparse
@@ -179,11 +177,9 @@ if st.sidebar.button('Detect Objects') and source_img is not None:
                 processed_img = preprocess_image(source_img)
                 cnn_predictions = get_predictions(models['cnn_model'], processed_img, st.session_state.confidence)
                 if cnn_predictions:
-                    for label, prob in cnn_predictions:
-                         with st.container(border=True):
-                            with st.empty():
-                                # st.write(f"{label}: {prob}")
-                                st.markdown(f"<p style='font-size:20px;'>{label}: {prob}</p>", unsafe_allow_html=True)
+                    with st.container(border=True):
+                        for label, prob in cnn_predictions:
+                            st.markdown(f"<p style='font-size:20px;'>{label}: {prob:.2f}</p>", unsafe_allow_html=True)
                 else:
                     st.write("No labels detected with confidence above threshold")
             except Exception as e:
@@ -194,8 +190,9 @@ if st.sidebar.button('Detect Objects') and source_img is not None:
                 st.subheader('EfficientNet Predictions')
                 efficient_predictions = predict_image(source_img, models['efficient_model'], st.session_state.confidence)
                 if efficient_predictions:
-                    for label, prob in efficient_predictions:
-                        st.write(f"{label}: {prob:.2f}")
+                    with st.container(border=True):
+                        for label, prob in efficient_predictions:
+                            st.markdown(f"<p style='font-size:20px;'>{label}: {prob:.2f}</p>", unsafe_allow_html=True)
                 else:
                     st.write("No labels detected with confidence above threshold")
             except Exception as e:

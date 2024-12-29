@@ -40,12 +40,8 @@ def process_image(image):
 def predict_image(image, model, threshold=0.5):
     """Predict labels and probabilities for the given image."""
     processed_img = process_image(image)
-    print("Processed Image Min/Max:", processed_img.min(), processed_img.max())
-    print("Processed Image Shape:", processed_img.shape)
     predictions = model.predict(processed_img)[0]
-    print("Predictions:", predictions)
     predicted_labels = [(LABELS[idx], float(prob)) for idx, prob in enumerate(predictions) if prob > threshold]
-    print("Labels above threshold:", predicted_labels)
     return predicted_labels
 
 
