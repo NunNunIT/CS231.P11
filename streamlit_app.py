@@ -9,9 +9,8 @@ from tensorflow.keras.models import load_model
 import tempfile
 import os
 from custom_metric import custom_accuracy, custom_hamming_loss, custom_exact_match_ratio
-import random
-from skimage.feature import hog
 import joblib
+from skimage.feature import hog
 from scipy.sparse import issparse
 from visualizeFunc import predict_image
 
@@ -111,167 +110,110 @@ if source_img:
 # Load models
 @st.cache_resource(hash_funcs={tf.keras.models.Model: id})
 def load_models():
-    cnn_model = load_model('./Model/cnn/cnn.h5', custom_objects=custom_objects)
-    # Load EfficientNet model with proper configuration
-    efficient_model = tf.keras.models.load_model('./Model/efficient/b0.h5')
-    # Set to inference mode
-    efficient_model.trainable = False
-    for layer in efficient_model.layers:
-        if isinstance(layer, tf.keras.layers.BatchNormalization):
-            layer.trainable = False
-            
-    # Compile the model to ensure proper setup
-    efficient_model.compile(
-        optimizer='adam',
-        loss='binary_crossentropy',
-        metrics=[custom_accuracy, custom_hamming_loss, custom_exact_match_ratio]
-    ) 
-    yolo_model = YOLO('./Model/yolo/weight/best.pt')
-    best_ml = joblib.load('./Model/ml/model__64__hog__17.joblib')
-    return cnn_model, efficient_model, yolo_model, best_ml
+    loaded_models = {}
+    errors = {}
+    try:
+        loaded_models['cnn_model'] = load_model('./Model/cnn/cnn.h5', custom_objects=custom_objects)
+    except Exception as e:
+        errors['cnn_model'] = str(e)
+
+    try:
+        efficient_model = tf.keras.models.load_model('./Model/efficient/b0.h5')
+        efficient_model.trainable = False
+        for layer in efficient_model.layers:
+            if isinstance(layer, tf.keras.layers.BatchNormalization):
+                layer.trainable = False
+        # efficient_model.compile(
+        #     optimizer='adam',
+        #     loss='binary_crossentropy',
+        #     metrics=[custom_accuracy, custom_hamming_loss, custom_exact_match_ratio]
+        # )
+        loaded_models['efficient_model'] = efficient_model
+    except Exception as e:
+        errors['efficient_model'] = str(e)
+
+    try:
+        loaded_models['yolo_model'] = YOLO('./Model/yolo/weight/best.pt')
+    except Exception as e:
+        errors['yolo_model'] = str(e)
+
+    try:
+        loaded_models['ml_model'] = joblib.load('./Model/ml/model__64__hog__17.joblib')
+    except Exception as e:
+        errors['ml_model'] = str(e)
+
+    return loaded_models, errors
 
 def preprocess_image(image, target_size=(224, 224)):
-    # Match exactly your notebook preprocessing
     if isinstance(image, Image.Image):
-        # Convert PIL Image to cv2 format
         image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-    
     img_resized = cv2.resize(image, target_size)
     img_array = img_resized / 255.0
     img_array = np.expand_dims(img_array, axis=0)
     return img_array
 
-print("-----------------")
-
-def preprocess_image_and_feature_extraction_ml(image):
-    RESIZE = (64, 64)
-    FEATURE = 'hog'
-    image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
-    image = cv2.resize(image, RESIZE)
-    features = None
-    if FEATURE == 'hog':
-        features, _ = hog(
-            image,
-            orientations=9,
-            pixels_per_cell=(8, 8),
-            cells_per_block=(2, 2),
-            block_norm="L2-Hys",
-            visualize=True,
-        )
-    
-    return features
-    
-
 def get_predictions(model, image, threshold=0.5):
-    predictions = model.predict(image)[0]  # Get first element like in notebook
-    # Use the same logic as your notebook
+    predictions = model.predict(image)[0]
     predicted_labels = []
     for idx, prob in enumerate(predictions):
-        if prob > threshold:  # Use same threshold comparison
+        if prob > threshold:
             predicted_labels.append((LABELS[idx], float(prob)))
-    
-    # Add debug prints
-    print("Raw predictions:", predictions)
-    print("Thresholded indices:", [i for i, prob in enumerate(predictions) if prob > threshold])
     return predicted_labels
 
+models, load_errors = load_models()
 
-def get_predictions_ml(model, features, threshold=0.5):
-    probas = convert_to_dense(model.predict_proba([features]))[0]
-    prediction = convert_to_dense(model.predict([features]))[0]
-    # print("Raw predictions:", probas)
-    # print("🚀 ~ prediction:", prediction)
-    predicted_labels = []
-    for idx, proba in enumerate(probas):
-        if proba >= threshold:
-            predicted_labels.append((LABELS[idx], proba))
-    # print("Thresholded indices:", [i for i, prob in enumerate(probas) if proba >= threshold])
-    return predicted_labels
+if load_errors:
+    with col3:
+        for model_name, error_message in load_errors.items():
+            st.error(f"{model_name} could not be loaded: {error_message}")
 
-
-def convert_to_dense(probabilities):
-    if issparse(probabilities):
-        dense_matrix = probabilities.toarray()
-    elif isinstance(probabilities, np.ndarray):
-        dense_matrix = probabilities
-    else:
-        raise ValueError("Input must be a scipy.sparse matrix or numpy.ndarray.")
-
-    return dense_matrix
-
-
-try:
-    cnn_model, efficient_model, yolo_model, ml_model = load_models()
-except Exception as e:
-    st.error("Unable to load models. Check the specified paths.")
-    st.error(e)
-
-# Object detection
 if st.sidebar.button('Detect Objects') and source_img is not None:
-    try:
-        with col3:
-            # ML Model
-            st.subheader('ML-KMM Model Predictions')
-            processed_img_ml = preprocess_image_and_feature_extraction_ml(source_img)
-            with st.container(border=True):
-                ml_predictions = get_predictions_ml(ml_model, processed_img_ml, st.session_state.confidence)
-                print("ML-KNN", ml_predictions)
-                if len(ml_predictions) > 0:
-                    for label, prob in ml_predictions:
-                        st.write(f"{label}")
-                else:
-                    st.write("No labels detected with confidence above threshold")
-
-            # CNN Model
-            st.subheader('CNN Model Predictions')
-            with st.container(border=True):
-                cnn_predictions = get_predictions(cnn_model, processed_img, st.session_state.confidence)
-                print("CNN", cnn_predictions)
+    with col3:
+        if 'cnn_model' in models:
+            try:
+                st.subheader('CNN Model Predictions')
+                processed_img = preprocess_image(source_img)
+                cnn_predictions = get_predictions(models['cnn_model'], processed_img, st.session_state.confidence)
                 if cnn_predictions:
-                    if len(cnn_predictions) > 1:
-                        cnn_predictions = cnn_predictions[:-1]
-
                     for label, prob in cnn_predictions:
-                        st.write(f"{label}")
+                         with st.container(border=True):
+                            with st.empty():
+                                # st.write(f"{label}: {prob}")
+                                st.markdown(f"<p style='font-size:20px;'>{label}: {prob}</p>", unsafe_allow_html=True)
                 else:
                     st.write("No labels detected with confidence above threshold")
+            except Exception as e:
+                st.error(f"Error in CNN model: {e}")
 
-            # EfficientNet Model
-            st.subheader('EfficientNet Predictions')
-            efficient_predictions = predict_image(source_img, efficient_model, st.session_state.confidence)
-            print("EFF", efficient_predictions)
-            if efficient_predictions:
-                for label, prob in efficient_predictions:
-                    st.write(f"{label}: {prob:.2f}")
-            else:
-                st.write("No labels detected with confidence above threshold")
+        if 'efficient_model' in models:
+            try:
+                st.subheader('EfficientNet Predictions')
+                efficient_predictions = predict_image(source_img, models['efficient_model'], st.session_state.confidence)
+                if efficient_predictions:
+                    for label, prob in efficient_predictions:
+                        st.write(f"{label}: {prob:.2f}")
+                else:
+                    st.write("No labels detected with confidence above threshold")
+            except Exception as e:
+                st.error(f"Error in EfficientNet model: {e}")
 
-            # YOLO Model
-            st.subheader('YOLO Detection')
-            # Create temporary file for YOLO processing if needed
-            with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_file:
-                img_path = tmp_file.name
-                source_img.save(img_path)
-                
-            yolo_results = yolo_model.predict(
-                img_path,
-                save=False,
-                imgsz=(608, 416),
-                conf=st.session_state.confidence,
-                iou=st.session_state.iou_thresh
-            )
-            
-            for r in yolo_results:
-                im_array = r.plot()
-                yolo_result = Image.fromarray(im_array[..., ::-1])
-            st.image(yolo_result, caption='YOLO Result', use_container_width=True)
-            
-            # Clean up temporary file
-            os.unlink(img_path)
-
-    except Exception as e:
-        st.error('Error encountered during model inference.')
-        st.error(e)
-else:
-    if st.sidebar.button('Detect Objects'):
-        st.error('Please select or upload an image first.')
+        if 'yolo_model' in models:
+            try:
+                st.subheader('YOLO Detection')
+                with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_file:
+                    img_path = tmp_file.name
+                    source_img.save(img_path)
+                yolo_results = models['yolo_model'].predict(
+                    img_path,
+                    save=False,
+                    imgsz=(608, 416),
+                    conf=st.session_state.confidence,
+                    iou=st.session_state.iou_thresh
+                )
+                for r in yolo_results:
+                    im_array = r.plot()
+                    yolo_result = Image.fromarray(im_array[..., ::-1])
+                st.image(yolo_result, caption='YOLO Result', use_container_width=True)
+                os.unlink(img_path)
+            except Exception as e:
+                st.error(f"Error in YOLO model: {e}")
