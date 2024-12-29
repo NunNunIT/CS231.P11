@@ -51,6 +51,7 @@ if 'confidence' not in st.session_state:
 if 'iou_thresh' not in st.session_state:
     st.session_state.iou_thresh = 0.2
 
+
 # Load models
 @st.cache_resource(hash_funcs={tf.keras.models.Model: id})
 def load_models():
@@ -91,33 +92,28 @@ with st.sidebar:
 
     # Tab 1: Upload Image
     with tabs[0]:
-        # st.session_state.uploaded_img = st.file_uploader('Upload an image...', type=['jpg', 'jpeg', 'png'])
-        # if st.session_state.uploaded_img:
-        #     st.session_state.uploaded_img = Image.open(st.session_state.uploaded_img)
-        # # st.slider('Confidence Threshold', 0, 100, 60, key='confidence_slider')
-        # st.session_state.confidence = st.slider(
-        # 'Select Model Confidence', 0, 100, 60) / 100
-        # st.session_state.iou_thresh = st.slider(
-        #     'Select IOU Threshold', 0, 100, 20) / 100
-        # st.session_state.camera_running = False
-        @st.cache_data
-        def load_image(image_file):
-            image = Image.open(image_file)
-            image = image.convert('RGB')
-            return image
+        st.session_state.uploaded_img = st.file_uploader('', type=['jpg', 'jpeg', 'png'])
+        if st.session_state.uploaded_img:
+            st.session_state.uploaded_img = Image.open(st.session_state.uploaded_img)
+        # @st.cache_data
+        # def load_image(image_file):
+        #     image = Image.open(image_file)
+        #     image = image.convert('RGB')
+        #     return image
 
-        with st.form('file-upload-form', clear_on_submit=True):
-            st.session_state.uploaded_img = st.file_uploader('Upload an image...', type=['jpg', 'jpeg', 'png'])
-            submitted = st.form_submit_button('Submit/Clear Upload')
+        # with st.form('file-upload-form', clear_on_submit=True):
+        #     st.session_state.uploaded_img = st.file_uploader('Upload an image...', type=['jpg', 'jpeg', 'png'])
+        #     submitted = st.form_submit_button('Submit/Clear Upload')
 
-        if isinstance(st.session_state.uploaded_img, st.runtime.uploaded_file_manager.UploadedFile):
-            st.session_state.uploaded_img = load_image(st.session_state.uploaded_img)
+        # if isinstance(st.session_state.uploaded_img, st.runtime.uploaded_file_manager.UploadedFile):
+        #     st.session_state.uploaded_img = load_image(st.session_state.uploaded_img)
 
     # Tab 2: Video Capture
     with tabs[1]:
         camera_option = st.selectbox('Select Camera', ['0', '1', '2', '3'])
-        if st.button('Toggle Camera'):
-            st.session_state.camera_running = True
+        if st.button('Tắt Camera' if st.session_state.camera_running else 'Mở Camera'):
+            st.session_state.camera_running = not st.session_state.camera_running
+            print(f'Camera {st.session_state.camera_running}')
     
     st.session_state.confidence = st.slider(
     'Select Model Confidence', 0, 100, 60) / 100
@@ -129,12 +125,12 @@ st.title('Fashion Object Detection')
 
 # Tab 1: Upload Image
 if not st.session_state.camera_running:
-    st.caption('Select a sample fashion photo, or upload your own!')
-    st.caption('Click the :blue[Detect Objects] button to see the results.')
-    col1, col2, col3 = st.columns([0.25, 0.25, 0.5], gap='medium')
+    col1, col2, col3 = st.columns([0.3, 0.3, 0.4], gap='medium')
 
     # Sample image selection
     with col1:
+        st.caption('Select a sample fashion photo, or upload your own!')
+        st.caption('Click the :blue[Detect Objects] button to see the results.')
         sample_img = image_select(
             label='Select a sample fashion photo',
             images=[
@@ -176,8 +172,10 @@ if not st.session_state.camera_running:
                         st.subheader('CNN Model Predictions')
                         cnn_predictions = predict_image(source_img, models['cnn_model'], st.session_state.confidence)
                         if cnn_predictions:
-                            for label, prob in cnn_predictions:
-                                st.markdown(f"<p style='font-size:20px;'>{label}: {prob}</p>", unsafe_allow_html=True)
+                            with st.container(border=True):
+                                for label, prob in cnn_predictions:
+                                    # st.write(f"{label}: {prob}")
+                                    st.markdown(f"<p style='font-size:20px;'>{label}: {prob:.2f}</p>", unsafe_allow_html=True)
                         else:
                             st.write("No labels detected with confidence above threshold")
                     except Exception as e:
@@ -188,8 +186,10 @@ if not st.session_state.camera_running:
                         st.subheader('EfficientNet Predictions')
                         efficient_predictions = predict_image(source_img, models['efficient_model'], st.session_state.confidence)
                         if efficient_predictions:
-                            for label, prob in efficient_predictions:
-                                st.markdown(f"<p style='font-size:20px;'>{label}: {prob}</p>", unsafe_allow_html=True)
+                            with st.container(border=True):
+                                for label, prob in efficient_predictions:
+                                    # st.write(f"{label}: {prob}")
+                                    st.markdown(f"<p style='font-size:20px;'>{label}: {prob:.2f}</p>", unsafe_allow_html=True)
                         else:
                             st.write("No labels detected with confidence above threshold")
                     except Exception as e:
@@ -216,7 +216,7 @@ if not st.session_state.camera_running:
                         st.error(f"Error in YOLO model: {e}")
 # Tab 2: Video Capture
 else:
-    col1, col2 = st.columns([0.75, 0.25], gap='medium')
+    col1, col2 = st.columns([0.6, 0.4], gap='medium')
 
     with col1:
         frame_placeholder = st.empty()
@@ -271,11 +271,12 @@ else:
                         st.markdown("### Predictions")
                         for model_name, preds in results.items():
                             st.markdown(f"**{model_name}:**")
-                            if preds:
-                                for label, prob in preds:
-                                    st.write(f"- {label}: {prob:.2f}")
-                            else:
-                                st.write("- No detections above threshold")
+                            with st.container(border=True):
+                                if preds:
+                                    for label, prob in preds:
+                                        st.write(f"- {label}: {prob:.2f}")
+                                else:
+                                    st.write("- No detections above threshold")
 
                 frame_count += 1
 
