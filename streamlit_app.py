@@ -11,9 +11,8 @@ import os
 from custom_metric import custom_accuracy, custom_hamming_loss, custom_exact_match_ratio
 import random
 import joblib
-from ml import *
 from scipy.sparse import issparse
-from visualizeFunc import predict_image
+from visualizeFunc import predict_image, predict_image_from_ml
 
 # Custom metrics
 custom_objects = {
@@ -164,13 +163,14 @@ except Exception as e:
 
 # Object detection
 if st.sidebar.button('Detect Objects') and source_img is not None:
+    processed_img = preprocess_image(source_img)
     try:
         with col3:
             # ML Model
             st.subheader('ML-KMM Model Predictions')
-            processed_img_ml = preprocess_image_and_feature_extraction_ml(source_img)
             with st.container(border=True):
-                ml_predictions = get_predictions_ml(ml_model, processed_img_ml, st.session_state.confidence)
+                image = cv2.cvtColor(np.array(source_img), cv2.COLOR_RGB2BGR)
+                ml_predictions = predict_image_from_ml(ml_model, image, st.session_state.confidence)
                 print("ML-KNN", ml_predictions)
                 if len(ml_predictions) > 0:
                     for label, prob in ml_predictions:
