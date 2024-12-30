@@ -75,7 +75,7 @@ def convert_to_dense(matrix):
     return dense_matrix
 
 
-def predict_image_from_ml(model, image, threshold=0.5):
+def predict_image_from_ml(image, model, threshold=0.5):
     features = preprocess_image_and_feature_extraction_ml(image)
     probas = convert_to_dense(model.predict_proba([features]))[0]
     prediction = convert_to_dense(model.predict([features]))[0]

@@ -167,6 +167,20 @@ if not st.session_state.camera_running:
 
         if st.button('Detect Objects'):
             with col3:
+                if 'ml_model' in models:
+                    try:
+                        st.subheader('ML Model Predictions')
+                        ml_predictions = predict_image_from_ml(source_img, models['ml_model'], st.session_state.confidence)
+                        if len(ml_predictions) > 0:
+                            with st.container(border=True):
+                                for label, prob in ml_predictions:
+                                    # st.write(f"{label}: {prob}")
+                                    st.markdown(f"<p style='font-size:20px;'>{label}: {prob:.2f}</p>", unsafe_allow_html=True)
+                        else:
+                            st.write("No labels detected with confidence above threshold")
+                    except Exception as e:
+                        st.error(f"Error in ML model: {e}")
+
                 if 'cnn_model' in models:
                     try:
                         st.subheader('CNN Model Predictions')
