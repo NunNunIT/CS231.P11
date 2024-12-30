@@ -36,7 +36,7 @@ LABELS = [
 # Streamlit setup
 st.set_page_config(
     page_title='Fashion Object Detection',
-    page_icon='💼',
+    page_icon='👗',
     layout='wide',
     initial_sidebar_state='expanded',
 )
@@ -63,7 +63,7 @@ def load_models():
         errors['cnn_model'] = str(e)
 
     try:
-        efficient_model = tf.keras.models.load_model('./Model/efficient/b0.h5')
+        efficient_model = tf.keras.models.load_model('./Model/efficient/efficientB0.h5')
         efficient_model.trainable = False
         for layer in efficient_model.layers:
             if isinstance(layer, tf.keras.layers.BatchNormalization):
