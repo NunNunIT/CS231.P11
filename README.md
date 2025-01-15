@@ -1,3 +1,26 @@
+# Dataset
+Dataset gốc:
+```
+https://www.kaggle.com/datasets/sovedi1356/fewsion-setup
+```
+
+Dataset cho phân loại:
+```
+https://www.kaggle.com/datasets/hongnhung21522436/8-labels-cloth-classification
+```
+
+Dataset cho yolo:
+```
+https://www.kaggle.com/datasets/hongnhung21522436/8-classes-cloth-yolo
+```
+
+# Kết quả Model đã huấn luyện
+Vì giới hạn dung lượng tải lên của Github, một số tệp còn thiếu sót.
+
+Bổ sung các model còn thiếu bằng cách truy cập drive. Tải về và giải nén tại thư mục /Model này
+
+https://drive.google.com/drive/folders/182ZBSGI6Y2b9sJOrtHEQrzKrX2G11muS
+
 
 # **Lưu ý:** 
 Để đảm bảo tính ổn định và tránh các lỗi phát sinh do sự không tương thích giữa các phiên bản thư viện, khuyến nghị sử dụng các phiên bản sau:
