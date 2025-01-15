@@ -1,4 +1,3 @@
-/Model/ml
 /Model/cnn
 /venv/*
 *.pyc

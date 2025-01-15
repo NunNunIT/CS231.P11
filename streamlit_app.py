@@ -70,7 +70,7 @@ def load_models():
         errors['yolo_model'] = str(e)
 
     try:
-        loaded_models['ml_model'] = joblib.load('./Model/ml/model__64__hog__17.joblib')
+        loaded_models['ml_model'] = joblib.load('./Model/ml/model_128_extract_hog_features_0.3_11_100%.joblib')
     except Exception as e:
         errors['ml_model'] = str(e)
 

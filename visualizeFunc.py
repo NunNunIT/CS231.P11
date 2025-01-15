@@ -46,7 +46,7 @@ def predict_image(image, model, threshold=0.5):
 
 
 def preprocess_image_and_feature_extraction_ml(image):
-    RESIZE = (64, 64)
+    RESIZE = (128, 128)
     FEATURE = 'hog'
     image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
     image = cv2.resize(image, RESIZE)
