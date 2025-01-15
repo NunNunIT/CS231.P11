@@ -4,4 +4,4 @@
 *.pyc
 *.rar
 *.zip
-Notebook/*
+/__pycache__
