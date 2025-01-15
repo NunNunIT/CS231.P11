@@ -8,18 +8,18 @@ import tensorflow as tf
 from tensorflow.keras.models import load_model
 import tempfile
 import os
-from custom_metric import custom_accuracy, custom_hamming_loss, custom_exact_match_ratio
+# from custom_metric import custom_accuracy, custom_hamming_loss, custom_exact_match_ratio
 import joblib
 from skimage.feature import hog
 from scipy.sparse import issparse
 from visualizeFunc import predict_image, predict_image_from_ml
 
 # Custom metrics
-custom_objects = {
-    'custom_accuracy': custom_accuracy,
-    'custom_hamming_loss': custom_hamming_loss,
-    'custom_exact_match_ratio': custom_exact_match_ratio
-}
+# custom_objects = {
+#     'custom_accuracy': custom_accuracy,
+#     'custom_hamming_loss': custom_hamming_loss,
+#     'custom_exact_match_ratio': custom_exact_match_ratio
+# }
 
 # Labels
 LABELS = [
@@ -58,7 +58,7 @@ def load_models():
     loaded_models = {}
     errors = {}
     try:
-        loaded_models['cnn_model'] = load_model('./Model/cnn/cnn.h5', custom_objects=custom_objects)
+        loaded_models['cnn_model'] = load_model('./Model/cnn/cnn.h5')
     except Exception as e:
         errors['cnn_model'] = str(e)
 
@@ -125,7 +125,7 @@ st.title('Fashion Object Detection')
 
 # Tab 1: Upload Image
 if not st.session_state.camera_running:
-    col1, col2, col3 = st.columns([0.35, 0.25, 0.4], gap='medium')
+    col1, col2, col3, col4 = st.columns([0.18, 0.2, 0.3, 0.3], gap='medium')
 
     # Sample image selection
     with col1:
@@ -209,6 +209,7 @@ if not st.session_state.camera_running:
                     except Exception as e:
                         st.error(f"Error in EfficientNet model: {e}")
 
+            with col4:
                 if 'yolo_model' in models:
                     try:
                         st.subheader('YOLO Detection')
@@ -254,8 +255,10 @@ else:
                     break
 
                 if frame_count % 5 == 0:
+                    # Làm mới results trong mỗi vòng lặp
                     results = {}
 
+                    # Xử lý YOLO model
                     if 'yolo_model' in models:
                         yolo_results = models['yolo_model'].predict(
                             frame,
@@ -264,33 +267,39 @@ else:
                         for r in yolo_results:
                             frame = r.plot()
 
+                    # Xử lý CNN model
                     if 'cnn_model' in models:
-                        results['CNN'] = predict_image(
+                        cnn_preds = predict_image(
                             frame, 
                             models['cnn_model'], 
                             st.session_state.confidence
                         )
+                        results['CNN'] = list(set(cnn_preds))  # Loại bỏ nhãn trùng lặp
 
+                    # Xử lý EfficientNet model
                     if 'efficient_model' in models:
-                        results['EfficientNet'] = predict_image(
+                        eff_preds = predict_image(
                             frame, 
                             models['efficient_model'], 
                             st.session_state.confidence
                         )
+                        results['EfficientNet'] = list(set(eff_preds))  # Loại bỏ nhãn trùng lặp
 
+                    # Chuyển đổi khung hình để hiển thị
                     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     frame_placeholder.image(frame, channels="RGB", use_container_width=True)
 
+                    # Xóa nội dung cũ và cập nhật predictions
+                    predictions_placeholder.empty()
                     with predictions_placeholder.container():
                         st.markdown("### Predictions")
                         for model_name, preds in results.items():
                             st.markdown(f"**{model_name}:**")
-                            with st.container(border=True):
-                                if preds:
-                                    for label, prob in preds:
-                                        st.write(f"- {label}: {prob:.2f}")
-                                else:
-                                    st.write("- No detections above threshold")
+                            if preds:
+                                for label, prob in preds:
+                                    st.write(f"- {label}: {prob:.2f}")
+                            else:
+                                st.write("- No detections above threshold")
 
                 frame_count += 1
 
