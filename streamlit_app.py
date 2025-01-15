@@ -8,18 +8,10 @@ import tensorflow as tf
 from tensorflow.keras.models import load_model
 import tempfile
 import os
-# from custom_metric import custom_accuracy, custom_hamming_loss, custom_exact_match_ratio
 import joblib
 from skimage.feature import hog
 from scipy.sparse import issparse
 from visualizeFunc import predict_image, predict_image_from_ml
-
-# Custom metrics
-# custom_objects = {
-#     'custom_accuracy': custom_accuracy,
-#     'custom_hamming_loss': custom_hamming_loss,
-#     'custom_exact_match_ratio': custom_exact_match_ratio
-# }
 
 # Labels
 LABELS = [

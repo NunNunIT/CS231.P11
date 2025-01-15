@@ -1,4 +1,7 @@
-/Model/*
+/Model/ml
+/Model/cnn
 /venv/*
 *.pyc
+*.rar
+*.zip
 Notebook/*
